@@ -1,8 +1,10 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import { prisma } from "./prisma";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -23,23 +25,22 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        if (!user || !user.passwordHash) return null;
-        if (user.isBanned) return null;
+        if (!user || !user.password_hash) return null;
+        if (user.is_banned) return null;
 
-        const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
+        const isValid = await bcrypt.compare(credentials.password, user.password_hash);
         if (!isValid) return null;
 
-        // Update last login
         await prisma.user.update({
           where: { id: user.id },
-          data: { lastLoginAt: new Date() },
+          data: { last_login_at: new Date() },
         });
 
         return {
           id: user.id,
           email: user.email,
-          name: user.displayName,
-          image: user.avatarUrl,
+          name: user.display_name,
+          image: user.avatar_url,
           username: user.username,
           role: user.role,
         };
@@ -48,24 +49,21 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // Handle Google OAuth
       if (account?.provider === "google") {
         const existing = await prisma.user.findUnique({
           where: { email: user.email! },
         });
-
         if (!existing) {
-          // Auto-create account for Google users
           const username = user.email!.split("@")[0].replace(/[^a-z0-9]/g, "") + Math.floor(Math.random() * 999);
           await prisma.user.create({
             data: {
               email: user.email!,
-              displayName: user.name || "PinoyHub User",
+              display_name: user.name || "PinoyHub User",
               username,
-              avatarUrl: user.image,
+              avatar_url: user.image,
               provider: "google",
-              providerId: account.providerAccountId,
-              emailVerified: true,
+              provider_id: account.providerAccountId,
+              email_verified: true,
               role: "free",
             },
           });
@@ -96,7 +94,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
