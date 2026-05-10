@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                                          String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  username                                    String         @unique @db.VarChar(30)
+  display_name                                String         @db.VarChar(60)
+  email                                       String         @unique @db.VarChar(255)
+  password_hash                               String?
+  avatar_url                                  String?
+  bio                                         String?
+  website_url                                 String?
+  role                                        String         @default("free") @db.VarChar(20)
+  provider                                    String?        @default("email") @db.VarChar(20)
+  provider_id                                 String?
+  email_verified                              Boolean        @default(false)
+  verify_token                                String?
+  is_banned                                   Boolean        @default(false)
+  ban_reason                                  String?
+  banned_at                                   DateTime?      @db.Timestamptz(6)
+  banned_by                                   String?        @db.Uuid
+  post_count                                  Int            @default(0)
+  comment_count                               Int            @default(0)
+  karma                                       Int            @default(0)
+  created_at                                  DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at                                  DateTime       @default(now()) @db.Timestamptz(6)
+  last_login_at                               DateTime?      @db.Timestamptz(6)
+  audit_logs                                  audit_logs[]
+  comments_comments_removed_byTousers         Comment[]      @relation("comments_removed_byTousers")
+  comments_comments_user_idTousers            Comment[]      @relation("comments_user_idTousers")
+  likes                                       likes[]
+  notifications_notifications_actor_idTousers Notification[] @relation("notifications_actor_idTousers")
+  notifications_notifications_user_idTousers  Notification[] @relation("notifications_user_idTousers")
+  payments                                    Payment[]
+  posts_posts_removed_byTousers               Post[]         @relation("posts_removed_byTousers")
+  posts_posts_user_idTousers                  Post[]         @relation("posts_user_idTousers")
+  reports_reports_reporter_idTousers          reports[]      @relation("reports_reporter_idTousers")
+  reports_reports_reviewed_byTousers          reports[]      @relation("reports_reviewed_byTousers")
+  space_members                               SpaceMember[]
+  spaces                                      Space[]
+  subscriptions                               Subscription[]
+  users                                       User?          @relation("usersTousers", fields: [banned_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_users                                 User[]         @relation("usersTousers")
+
+  @@index([email], map: "idx_users_email")
+  @@index([role], map: "idx_users_role")
+  @@index([username], map: "idx_users_username")
+  @@map("users")
+}
+
+model Space {
+  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  slug            String        @unique @db.VarChar(50)
+  name            String        @db.VarChar(100)
+  description     String?
+  banner_url      String?
+  icon_url        String?
+  color           String?       @db.VarChar(7)
+  is_private      Boolean       @default(false)
+  is_premium_only Boolean       @default(false)
+  created_by      String        @db.Uuid
+  rules           String?
+  member_count    Int           @default(0)
+  post_count      Int           @default(0)
+  is_archived     Boolean       @default(false)
+  is_featured     Boolean       @default(false)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @default(now()) @db.Timestamptz(6)
+  ads             ads[]
+  posts           Post[]
+  space_members   SpaceMember[]
+  users           User          @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([is_featured], map: "idx_spaces_featured")
+  @@index([slug], map: "idx_spaces_slug")
+  @@map("spaces")
+}
+
+model SpaceMember {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  space_id  String   @db.Uuid
+  user_id   String   @db.Uuid
+  role      String   @default("member") @db.VarChar(20)
+  joined_at DateTime @default(now()) @db.Timestamptz(6)
+  spaces    Space    @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users     User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([space_id, user_id])
+  @@index([space_id], map: "idx_space_members_space")
+  @@index([user_id], map: "idx_space_members_user")
+  @@map("space_members")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model Post {
+  id                            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  space_id                      String    @db.Uuid
+  user_id                       String    @db.Uuid
+  title                         String    @db.VarChar(300)
+  body                          String?
+  type                          String    @default("text") @db.VarChar(10)
+  link_url                      String?
+  image_url                     String?
+  is_premium                    Boolean   @default(false)
+  is_pinned                     Boolean   @default(false)
+  is_locked                     Boolean   @default(false)
+  is_removed                    Boolean   @default(false)
+  removed_reason                String?
+  removed_by                    String?   @db.Uuid
+  like_count                    Int       @default(0)
+  comment_count                 Int       @default(0)
+  view_count                    Int       @default(0)
+  score                         Float     @default(0)
+  created_at                    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime  @default(now()) @db.Timestamptz(6)
+  comments                      Comment[]
+  users_posts_removed_byTousers User?     @relation("posts_removed_byTousers", fields: [removed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  spaces                        Space     @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_posts_user_idTousers    User      @relation("posts_user_idTousers", fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)], map: "idx_posts_created_at")
+  @@index([is_premium], map: "idx_posts_is_premium")
+  @@index([score(sort: Desc)], map: "idx_posts_score")
+  @@index([space_id], map: "idx_posts_space_id")
+  @@index([user_id], map: "idx_posts_user_id")
+  @@map("posts")
+}
+
+model Comment {
+  id                               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  post_id                          String    @db.Uuid
+  user_id                          String    @db.Uuid
+  parent_id                        String?   @db.Uuid
+  body                             String
+  like_count                       Int       @default(0)
+  is_removed                       Boolean   @default(false)
+  removed_by                       String?   @db.Uuid
+  created_at                       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime  @default(now()) @db.Timestamptz(6)
+  comments                         Comment?  @relation("commentsTocomments", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_comments                   Comment[] @relation("commentsTocomments")
+  posts                            Post      @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_comments_removed_byTousers User?     @relation("comments_removed_byTousers", fields: [removed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_comments_user_idTousers    User      @relation("comments_user_idTousers", fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([parent_id], map: "idx_comments_parent_id")
+  @@index([post_id], map: "idx_comments_post_id")
+  @@index([user_id], map: "idx_comments_user_id")
+  @@map("comments")
+}
+
+model Subscription {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id              String    @db.Uuid
+  plan                 String    @db.VarChar(20)
+  status               String    @default("active") @db.VarChar(20)
+  current_period_start DateTime  @db.Timestamptz(6)
+  current_period_end   DateTime  @db.Timestamptz(6)
+  cancel_at_period_end Boolean   @default(false)
+  paymongo_customer_id String?
+  paymongo_sub_id      String?
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime  @default(now()) @db.Timestamptz(6)
+  payments             Payment[]
+  users                User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([status], map: "idx_subscriptions_status")
+  @@index([user_id], map: "idx_subscriptions_user_id")
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                    String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id               String        @db.Uuid
+  subscription_id       String?       @db.Uuid
+  amount_centavos       Int
+  currency              String        @default("PHP") @db.VarChar(3)
+  method                String        @db.VarChar(30)
+  status                String        @default("pending") @db.VarChar(20)
+  paymongo_payment_id   String?       @unique
+  paymongo_source_id    String?
+  paymongo_checkout_url String?
+  reference_number      String?
+  failure_reason        String?
+  paid_at               DateTime?     @db.Timestamptz(6)
+  invoice_url           String?
+  created_at            DateTime      @default(now()) @db.Timestamptz(6)
+  subscriptions         Subscription? @relation(fields: [subscription_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                 User          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([paid_at(sort: Desc)], map: "idx_payments_paid_at")
+  @@index([status], map: "idx_payments_status")
+  @@index([user_id], map: "idx_payments_user_id")
+  @@map("payments")
+}
+
+model Notification {
+  id                                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id                             String    @db.Uuid
+  actor_id                            String?   @db.Uuid
+  type                                String    @db.VarChar(40)
+  target_type                         String?   @db.VarChar(10)
+  target_id                           String?   @db.Uuid
+  message                             String
+  is_read                             Boolean   @default(false)
+  read_at                             DateTime? @db.Timestamptz(6)
+  created_at                          DateTime  @default(now()) @db.Timestamptz(6)
+  users_notifications_actor_idTousers User?     @relation("notifications_actor_idTousers", fields: [actor_id], references: [id], onUpdate: NoAction)
+  users_notifications_user_idTousers  User      @relation("notifications_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)], map: "idx_notifications_created")
+  @@index([user_id, is_read], map: "idx_notifications_is_read")
+  @@index([user_id], map: "idx_notifications_user_id")
+  @@map("notifications")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ads {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  space_id    String?   @db.Uuid
+  advertiser  String    @db.VarChar(100)
+  title       String    @db.VarChar(150)
+  image_url   String?
+  link_url    String
+  placement   String    @db.VarChar(30)
+  is_active   Boolean   @default(true)
+  starts_at   DateTime? @db.Timestamptz(6)
+  ends_at     DateTime? @db.Timestamptz(6)
+  impressions Int       @default(0)
+  clicks      Int       @default(0)
+  revenue_php Decimal   @default(0) @db.Decimal(10, 2)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  spaces      Space?    @relation(fields: [space_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([is_active], map: "idx_ads_active")
+  @@index([space_id], map: "idx_ads_space_id")
+}
+
+model audit_logs {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id     String?  @db.Uuid
+  action      String   @db.VarChar(60)
+  target_type String?  @db.VarChar(20)
+  target_id   String?  @db.Uuid
+  metadata    Json?
+  ip_address  String?  @db.Inet
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  users       User?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)], map: "idx_audit_created_at")
+  @@index([user_id], map: "idx_audit_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model likes {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id     String   @db.Uuid
+  target_type String   @db.VarChar(10)
+  target_id   String   @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  users       User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, target_type, target_id])
+  @@index([target_type, target_id], map: "idx_likes_target")
+  @@index([user_id], map: "idx_likes_user")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model reports {
+  id                               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  reporter_id                      String    @db.Uuid
+  target_type                      String    @db.VarChar(10)
+  target_id                        String    @db.Uuid
+  reason                           String    @db.VarChar(50)
+  details                          String?
+  status                           String    @default("pending") @db.VarChar(20)
+  reviewed_by                      String?   @db.Uuid
+  reviewed_at                      DateTime? @db.Timestamptz(6)
+  action_taken                     String?
+  created_at                       DateTime  @default(now()) @db.Timestamptz(6)
+  users_reports_reporter_idTousers User      @relation("reports_reporter_idTousers", fields: [reporter_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_reports_reviewed_byTousers User?     @relation("reports_reviewed_byTousers", fields: [reviewed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([status], map: "idx_reports_status")
+  @@index([target_type, target_id], map: "idx_reports_target")
+}
